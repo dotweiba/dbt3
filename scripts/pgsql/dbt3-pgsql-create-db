@@ -25,10 +25,16 @@ if [ -z ${PGDATABASE} ]; then
     exit 1
 fi
 
+PSQL="psql -X -d postgres"
+
 XLOGPATH=""
 OUTPUT_DIR="."
-while getopts "o:p:x:" OPT; do
+NODES=1
+while getopts "n:o:p:x:" OPT; do
 	case ${OPT} in
+	n)
+		NODES=$OPTARG
+		;;
 	o)
 		OUTPUT_DIR=${OPTARG}
 		;;
@@ -44,27 +50,64 @@ while getopts "o:p:x:" OPT; do
 	esac
 done
 
-dbt3-pgsql-stop-db
+dbt3-pgsql-stop-db -n $NODES
 
 # Create database
+SKIP=0
 echo "Creating database..."
 if [ -d ${PGDATA} ]; then
 	echo "PGData directory '${PGDATA}' already exists, skipping initdb..."
+	SKIP=1
 else
 	# initialize database cluster
 	echo "initializing database cluster..."
-	initdb -A trust -D ${PGDATA} --locale=C || exit 1
 
-	# Use alternative XLOG directory.
-	if [ ! "x${XLOGPATH}" = "x" ]; then
-	    mkdir -p ${XLOGPATH}
-	    rm -rf ${XLOGPATH}/pg_xlog
-	    mv ${PGDATA}/pg_xlog ${XLOGPATH}/pg_xlog || exit 1
-	    ln -s ${XLOGPATH}/pg_xlog ${PGDATA}/pg_xlog || exit 1
-	fi
+	initdb -D $PGDATA/c --nodename coordinator
+	i=1
+	while [ $i -le $NODES ]; do
+		initdb -D $PGDATA/d$i --nodename datanode$i
+		i=$(( $i + 1 ))
+	done
+	initgtm -D $PGDATA/g -Z gtm
 fi
 
-eval dbt3-pgsql-start-db -o $OUTPUT_DIR $PARAMOPT
+eval dbt3-pgsql-start-db -n $NODES -o $OUTPUT_DIR $PARAMOPT
+if [ $SKIP -eq 1 ]; then
+	exit 0
+fi
+
+$PSQL -c "ALTER NODE coordinator WITH (TYPE = 'coordinator', PORT = 5432);"
+
+i=1
+while [ $i -le $NODES ]; do
+	PORT=$(( $BASEPORT + $i ))
+	$PSQL -c "CREATE NODE datanode$i WITH (TYPE = 'datanode', PORT = $PORT);"
+	$PSQL -c "EXECUTE DIRECT ON (datanode$i) 'CREATE NODE coordinator WITH (TYPE = ''coordinator'', PORT = $PORT)';"
+	i=$(( $i + 1 ))
+done
+
+i=1
+while [ $i -le $NODES ]; do
+	PORT=$(( $BASEPORT + $i ))
+	j=1
+	while [ $j -le $NODES ]; do
+		PORT2=$(( $BASEPORT + $j ))
+		if [ $j -eq $i ]; then
+			$PSQL -c "EXECUTE DIRECT ON (datanode$j) 'ALTER NODE datanode$i WITH (TYPE = ''datanode'', PORT = $PORT)';"
+		else
+			$PSQL -c "EXECUTE DIRECT ON (datanode$j) 'CREATE NODE datanode$i WITH (TYPE = ''datanode'', PORT = $PORT)';"
+		fi
+		j=$(( $j + 1 ))
+	done
+
+	i=$(( $i + 1 ))
+done
+
+$PSQL -c "SELECT pgxc_pool_reload();"
+i=1
+while [ $i -le $NODES ]; do
+	$PSQL -c "EXECUTE DIRECT ON (datanode$i) 'SELECT pgxc_pool_reload()';"
+	i=$(( $i + 1 ))
+done
 
 createdb ${PGDATABASE} || exit 1
-#createlang plpgsql ${PGDATABASE}

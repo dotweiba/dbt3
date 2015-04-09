@@ -16,10 +16,14 @@ fi
 
 LOGFILE="dbt3.log"
 OUTDIR="."
-while getopts "fo:p:" OPT; do
+NODES=1
+while getopts "fn:o:p:" OPT; do
 	case ${OPT} in
 	f)
 		rm -f ${PGDATA}/postmaster.pid
+		;;
+	n)
+		NODES=$OPTARG
 		;;
 	o)
 		OUTDIR=${OPTARG}
@@ -33,25 +37,14 @@ while getopts "fo:p:" OPT; do
 	esac
 done
 
-if [ -f "${PGDATA}/postmaster.pid" ]; then
-	echo "Database is already started: ${PGDATA}/postmaster.pid."
-	exit 0
-fi
-
-if [ "x${PGPORT}" != "x" ]; then
-	PARAMETERS="${PARAMETERS} -p ${PGPORT}"
-fi
-
-if [ "x${PARAMETERS}" = "x" ]; then
-	pg_ctl -w -D ${PGDATA} -l ${OUTDIR}/${LOGFILE} start
-else
-	eval pg_ctl -w -D $PGDATA -o \"$PARAMETERS\" -l $OUTDIR/$LOGFILE start
-fi
-
-if [ ! -f "${PGDATA}/postmaster.pid" ]; then
-	echo "database did not start correctly, check database log"
-	exit 1
-fi
-
-# PostgreSQL does not give read permissions to everyone by default.
-chmod +r $OUTDIR/$LOGFILE
+gtm_ctl -D $PGDATA/g -Z gtm -l $OUTDIR/gtm.log start
+i=1
+while [ $i -le $NODES ]; do
+	PORT=$(( $BASEPORT + $i ))
+	POOLPORT=$(( $BASEPOOLPORT + $i ))
+	pg_ctl -Z datanode -w -D $PGDATA/d$i -l $OUTDIR/datanode-$i.log \
+			-o "-p $PORT -c pooler_port=$POOLPORT $PARAMETERS" start
+	i=$(( $i + 1 ))
+done
+pg_ctl -Z coordinator -w -D $PGDATA/c -l $OUTDIR/coordinator.log \
+		-o "-c pooler_port=$BASEPOOLPORT $PARAMTERS" start

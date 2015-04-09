@@ -13,11 +13,20 @@ if [ -z ${PGDATA} ]; then
 	exit 1
 fi
 
-# We only need to stop the database if it's running.
-if [ -f "${PGDATA}/postmaster.pid" ]; then
-	# Wait 10 minutes until the stop timeout exceeds,
-	# becasue large amount of shared buffers and
-	# long checkpoint timeout take longer time to
-	# complete a checkpoint and shutdown.
-	pg_ctl -w -D ${PGDATA} -t 600 stop ${1}
-fi
+while getopts "n:" OPT; do
+	case ${OPT} in
+	n)
+		NODES=$OPTARG
+		;;
+	esac
+done
+
+pg_ctl -Z coordinator -w -D $PGDATA/c stop -m fast
+i=1
+while [ $i -le $NODES ]; do
+	PORT=$(( $BASEPORT + $i ))
+	POOLPORT=$(( $BASEPOOLPORT + $i ))
+	pg_ctl -Z datanode -w -D $PGDATA/d$i stop -m fast
+	i=$(( $i + 1 ))
+done
+gtm_ctl -D $PGDATA/g -Z gtm stop -m fast
