@@ -13,9 +13,15 @@ load_table()
 	table=${1}
 	file=${table}.tbl
 
-	${PSQL} << __EOF__
-COPY ${table} FROM '${DSS_PATH}/${file}' USING DELIMITERS '|';
-__EOF__
+	TOTAL=`wc -l $DSS_PATH/$file | cut -d " " -f 1`
+	LPF=$(( ($TOTAL + $NODES - 1) / $NODES ))
+
+	(cd $DSS_PATH; split -d -l $LPF $file $table)
+
+	for FILE in `ls $DSS_PATH/$table??`; do
+		$PSQL -c "COPY $table FROM '$FILE' USING DELIMITERS '|';" &
+	done
+	wait
 }
 
 supplier()
@@ -189,9 +195,13 @@ ADD CONSTRAINT pk_region PRIMARY KEY (r_regionkey) ${TS_PK_REGION};" &
 	${PSQL} -c "ANALYZE region;"
 }
 
+NODES=1
 USE_TABLESPACES=0
-while getopts "t" OPT; do
+while getopts "n:t" OPT; do
 	case ${OPT} in
+	n)
+		NODES=$OPTARG
+		;;
 	t)
 		USE_TABLESPACES=1
 		;;

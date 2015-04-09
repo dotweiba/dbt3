@@ -10,13 +10,15 @@
 #
 
 GENERATE=0
+NODES=1
 ONLY_LOAD=0
+OUTPUT_DIR="."
 SF=0
 USE_OPROFILE=0
 USE_LINUXPERF=0
 WORKLOAD="H"
 
-while getopts "f:g:lo:p:RtyY:" opt; do
+while getopts "f:g:ln:o:p:RtyY:" opt; do
 	case $opt in
 	f)
 		SF=$OPTARG
@@ -26,6 +28,9 @@ while getopts "f:g:lo:p:RtyY:" opt; do
 		;;
 	l)
 		ONLY_LOAD=1
+		;;
+	n)
+		NODES=$OPTARG
 		;;
 	o)
 		OUTPUT_DIR=$OPTARG
@@ -75,7 +80,7 @@ fi
 # Start collecting system statistics.
 dbt3-sysstats --outdir $OUTPUT_DIR --sample 60 || exit 1
 
-eval dbt3-pgsql-create-db -o $OUTPUT_DIR $PARAMETERS_ARG
+eval dbt3-pgsql-create-db -n $NODES -o $OUTPUT_DIR $PARAMETERS_ARG
 
 dbt3-pgsql-drop-tables || exit 1
 dbt3-pgsql-create-tables ${TABLESPACE_FLAG} || exit 1
@@ -105,7 +110,7 @@ if [ $USE_LINUXPERF -eq 1 ]; then
 	PERFCOMMAND="perf record -a -g -s -F 100 -o $PERFDIR/perf.data"
 fi
 
-eval $PERFCOMMAND dbt3-pgsql-load-data || exit 1
+eval $PERFCOMMAND dbt3-pgsql-load-data -n $NODES || exit 1
 
 psql -v ON_ERROR_STOP=1 -X -q << __EOF__ > /dev/null 2>&1
 UPDATE time_statistics
