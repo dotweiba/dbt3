@@ -10,6 +10,7 @@
 
 EXPLAIN=0
 EXPLAIN_ARG=
+NODES=1
 USE_OPROFILE=0
 USE_LINUXPERF=0
 NO_REFRESH=0
@@ -20,7 +21,7 @@ usage()
 }
 
 # process the command line parameters
-while getopts "a:ef:p:o:s:yYz" opt; do
+while getopts "a:ef:n:o:p:s:yYz" opt; do
 	case $opt in
 		a)
 			DATABASE=$OPTARG
@@ -31,6 +32,9 @@ while getopts "a:ef:p:o:s:yYz" opt; do
 			;;
 		f)
 			SCALE_FACTOR=$OPTARG
+			;;
+		n)
+			NODES=$OPTARG
 			;;
 		o)
 			OUTPUT_DIR=$OPTARG
@@ -99,8 +103,8 @@ __EOF__
 	i=$(( ${i} + 1 ))
 done
 
-dbt3-$DATABASE-stop-db || exit 1
-eval dbt3-$DATABASE-start-db -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
+dbt3-$DATABASE-stop-db -n $NODES || exit 1
+eval dbt3-$DATABASE-start-db -n $NODES -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
 
 # Start collecting system statistics.
 dbt3-sysstats --outdir $OUTPUT_DIR --sample 60 || exit 1
@@ -185,7 +189,7 @@ kill ${PIDSTATPID}
 read DBSTATPID < ${OUTPUT_DIR}/dbstat.pid
 kill ${DBSTATPID}
 
-dbt3-$DATABASE-stop-db || exit 1
+dbt3-$DATABASE-stop-db -n $NODES || exit 1
 
 if [ -f /proc/profile ]; then
 	profname="Power_Test"
