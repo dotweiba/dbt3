@@ -54,6 +54,7 @@ RUN_LOAD_TEST=0
 RUN_POWER_TEST=0
 RUN_THROUGHPUT_TEST=0
 NO_REFRESH=0
+NODES=1
 OUTPUT_DIR=""
 SCALE_FACTOR=1
 SEED=0
@@ -71,7 +72,7 @@ if [ -n "$DEFAULT_THROUGHPUT_PARAMETERS" ]; then
 	THROUGHPUT_PARAMETERS="$DEFAULT_THROUGHPUT_PARAMETERS"
 fi
 
-while getopts "123a:c:ef:ghn:Oo:p:Pq:Rr:s:tuVz" opt; do
+while getopts "123a:c:ef:ghN:n:Oo:p:Pq:Rr:s:tuVz" opt; do
 	case $opt in
 	1)
 		RUN_LOAD_TEST=1
@@ -107,6 +108,9 @@ while getopts "123a:c:ef:ghn:Oo:p:Pq:Rr:s:tuVz" opt; do
 	h)
 		usage
 		exit 1
+		;;
+	N)
+		NODES=$OPTARG
 		;;
 	n)
 		STREAMS=$OPTARG
@@ -217,6 +221,7 @@ if [ ${RUN_LOAD_TEST} -eq 1 ]; then
 			${LINUXPERF_FLAG} \
 			-f $SCALE_FACTOR \
 			-g $GENERATE \
+			-n $NODES \
 			${WORKLOAD_ARG} \
 			${TABLESPACES_FLAG} || exit 1
 else
@@ -225,7 +230,7 @@ else
 	# be cleared out.  Otherwise the data collection will be
 	# incomprehensible with duplicate data.
 	#
-	dbt3-${DATABASE}-start-db -o $OUTPUT_DIR
+	dbt3-${DATABASE}-start-db -n $NODES -o $OUTPUT_DIR
 fi
 
 if [ ${RUN_POWER_TEST} -eq 1 ] || [ ${RUN_THROUGHPUT_TEST} -eq 1 ]; then
@@ -241,6 +246,7 @@ if [ ${RUN_POWER_TEST} -eq 1 ]; then
 			${POWER_PARAMETERS_ARG}\
 			${TEST_ARGS} \
 			-s ${SEED_FILE} \
+			-n $NODES \
 			${OPROFILE_FLAG} \
 			${LINUXPERF_FLAG} \
 			${NO_REFRESH_FLAG}
@@ -258,6 +264,7 @@ if [ ${RUN_THROUGHPUT_TEST} -eq 1 ]; then
 			${THROUGHPUT_PARAMETERS_ARG} \
 			${TEST_ARGS} \
 			-s ${SEED_FILE} \
+			-N $NODES \
 			${OPROFILE_FLAG} \
 			${LINUXPERF_FLAG} \
 			${NO_REFRESH_FLAG}
@@ -276,7 +283,7 @@ fi
 
 # Make sure the database is started, which it might be depending on what parts
 # of the workload are executed.
-dbt3-${DATABASE}-start-db -o $OUTPUT_DIR
+dbt3-${DATABASE}-start-db -n $NODES -o $OUTPUT_DIR
 
 # Get system details.
 echo "Getting system configuration... "
@@ -287,7 +294,7 @@ echo "Getting query times... "
 dbt3-$DATABASE-get-query-time > $OUTPUT_DIR/q_time.csv || exit 1
 
 # Stop the database at the end of the test.
-dbt3-${DATABASE}-stop-db
+dbt3-${DATABASE}-stop-db -n $NODES
 
 # Calculate metrics.
 echo "Post processing query results... "

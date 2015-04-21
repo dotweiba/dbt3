@@ -10,6 +10,7 @@
 #
 
 NO_REFRESH=0
+
 while getopts "a:ef:n:o:s:Yz" opt; do
 	case $opt in
 	a) DATABASE=$OPTARG

@@ -12,17 +12,20 @@
 USE_OPROFILE=0
 USE_LINUXPERF=0
 
-TEST_ARGS=
 NO_REFRESH=0
 NO_REFRESH_FLAG=
+NODES=1
+TEST_ARGS=
 
-while getopts "a:ef:n:o:p:s:yYz" opt; do
+while getopts "a:ef:N:n:o:p:s:yYz" opt; do
 	case $opt in
 	a) DATABASE=$OPTARG
 		;;
 	e) TEST_ARGS="$TEST_ARGS -e"
 		;;
 	f) scale_factor=$OPTARG
+		;;
+	N) NODES=$OPTARG
 		;;
 	n) num_stream=$OPTARG
 		;;
@@ -81,8 +84,8 @@ if [ $USE_LINUXPERF -eq 1 ]; then
 	PERFCOMMAND="perf record -a -g -s -F 100 -o $PERFDIR/perf.data"
 fi
 
-dbt3-$DATABASE-stop-db || exit 1
-eval dbt3-$DATABASE-start-db -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
+dbt3-$DATABASE-stop-db -n $NODES || exit 1
+eval dbt3-$DATABASE-start-db -n $NODES -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
 
 dbt3-$DATABASE-time-statistics -s -n PERF.THRUPUT || exit 1
 
@@ -108,7 +111,7 @@ kill ${DBSTATPID}
 dbt3-$DATABASE-time-statistics -e -n PERF.THRUPUT || exit 1
 
 # Stop the database after the test.
-dbt3-$DATABASE-stop-db || exit 1
+dbt3-$DATABASE-stop-db -n $NODES || exit 1
 
 if [ -f /proc/profile ]; then
 	profname="Throughput_Test"
