@@ -41,7 +41,7 @@ ON supplier (s_nationkey, s_suppkey);" &
 
 	wait
 
-	${PSQL} -c "ANALYZE supplier;"
+	${PSQL} -c "VACUUM ANALYZE supplier;"
 }
 
 part()
@@ -66,7 +66,7 @@ ON part(p_name);" &
 
 	wait
 
-	${PSQL} -c "ANALYZE part;"
+	${PSQL} -c "VACUUM ANALYZE part;"
 }
 
 partsupp()
@@ -83,7 +83,7 @@ ON partsupp (ps_suppkey) ${TS_I_PS_SUPPKEY};" &
 
 	wait
 
-	${PSQL} -c "ANALYZE partsupp;"
+	${PSQL} -c "VACUUM ANALYZE partsupp;"
 }
 
 customer()
@@ -109,7 +109,7 @@ ON customer (c_mktsegment, c_custkey);" &
 
 	wait
 
-	${PSQL} -c "ANALYZE customer;"
+	${PSQL} -c "VACUUM ANALYZE customer;"
 }
 
 orders()
@@ -128,7 +128,7 @@ ON orders (o_orderkey, o_orderdate);" &
 
 	wait
 
-	${PSQL} -c "ANALYZE orders;"
+	${PSQL} -c "VACUUM ANALYZE orders;"
 }
 
 lineitem()
@@ -166,7 +166,7 @@ ON lineitem (l_orderkey, l_linenumber, l_shipdate);" &
 
 	wait
 
-	${PSQL} -c "ANALYZE lineitem;"
+	${PSQL} -c "VACUUM ANALYZE lineitem;"
 }
 
 nation()
@@ -179,7 +179,7 @@ ADD CONSTRAINT pk_nation PRIMARY KEY (n_nationkey) ${TS_PK_NATION};" &
 
 	wait
 
-	${PSQL} -c "ANALYZE nation;"
+	${PSQL} -c "VACUUM ANALYZE nation;"
 }
 
 region()
@@ -192,16 +192,13 @@ ADD CONSTRAINT pk_region PRIMARY KEY (r_regionkey) ${TS_PK_REGION};" &
 
 	wait
 
-	${PSQL} -c "ANALYZE region;"
+	${PSQL} -c "VACUUM ANALYZE region;"
 }
 
-NODES=1
+NODES=0
 USE_TABLESPACES=0
-while getopts "n:t" OPT; do
+while getopts "t" OPT; do
 	case ${OPT} in
-	n)
-		NODES=$OPTARG
-		;;
 	t)
 		USE_TABLESPACES=1
 		;;
@@ -209,6 +206,10 @@ while getopts "n:t" OPT; do
 done
 
 PSQL="psql -v ON_ERROR_STOP=1 -X"
+
+for HOSTNAME in $HOSTNAMES; do
+	NODES=$(( $NODES + 1 ))
+done
 
 supplier &
 part &

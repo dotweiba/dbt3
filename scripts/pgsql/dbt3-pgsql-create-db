@@ -25,16 +25,13 @@ if [ -z ${PGDATABASE} ]; then
     exit 1
 fi
 
-PSQL="psql -X -d postgres"
+PSQL="psql -X -d postgres -v ON_ERROR_STOP=1"
 
 XLOGPATH=""
 OUTPUT_DIR="."
 NODES=1
-while getopts "n:o:p:x:" OPT; do
+while getopts "o:p:x:" OPT; do
 	case ${OPT} in
-	n)
-		NODES=$OPTARG
-		;;
 	o)
 		OUTPUT_DIR=${OPTARG}
 		;;
@@ -50,64 +47,190 @@ while getopts "n:o:p:x:" OPT; do
 	esac
 done
 
-dbt3-pgsql-stop-db -n $NODES
+dbt3-pgsql-stop-db
 
-# Create database
 SKIP=0
 echo "Creating database..."
 if [ -d ${PGDATA} ]; then
 	echo "PGData directory '${PGDATA}' already exists, skipping initdb..."
 	SKIP=1
 else
-	# initialize database cluster
 	echo "initializing database cluster..."
 
-	initdb -D $PGDATA/c --nodename coordinator
+	initdb -D $COORDINATORDATA --nodename coordinator || exit 1
 	i=1
-	while [ $i -le $NODES ]; do
-		initdb -D $PGDATA/d$i --nodename datanode$i
+	for HOSTNAME in $HOSTNAMES; do
+		ssh $HOSTNAME << __EOF__
+#initdb -D $COORDINATORDATA.$i --nodename coordinator_$i || exit 1
+#echo "host all all 0.0.0.0/0 trust" >> $COORDINATORDATA.$i/pg_hba.conf || exit 1
+#echo "host all all ::/0 trust" >> $COORDINATORDATA.$i/pg_hba.conf || exit 1
+initdb -D $DATANODEDATA$i --nodename datanode_$i || exit 1
+echo "host all all 0.0.0.0/0 trust" >> $DATANODEDATA$i/pg_hba.conf || exit 1
+echo "host all all ::/0 trust" >> $DATANODEDATA$i/pg_hba.conf || exit 1
+initgtm -D $GTMPROXYDATA$i -Z gtm_proxy || exit 1
+__EOF__
+		if [ $? -ne 0 ]; then
+			exit 1
+		fi
+
 		i=$(( $i + 1 ))
 	done
-	initgtm -D $PGDATA/g -Z gtm
+	initgtm -D $GTMDATA -Z gtm
 fi
 
-eval dbt3-pgsql-start-db -n $NODES -o $OUTPUT_DIR $PARAMOPT
+eval dbt3-pgsql-start-db -o $OUTPUT_DIR $PARAMOPT
 if [ $SKIP -eq 1 ]; then
 	exit 0
 fi
 
-$PSQL -c "ALTER NODE coordinator WITH (TYPE = 'coordinator', PORT = 5432);"
+echo "Adding coordinators to coordinators..."
+$PSQL << __EOF__
+ALTER NODE coordinator WITH (TYPE = 'coordinator', HOST = '$GTMHOST');
+__EOF__
+if [ $? -ne 0 ]; then
+	exit 1
+fi
 
+#i=1
+#for HOSTNAME in $HOSTNAMES; do
+#	$PSQL <<__EOF__
+#CREATE NODE coordinator_$i WITH (TYPE = 'coordinator', HOST = '$HOSTNAME');
+#__EOF__
+#	if [ $? -ne 0 ]; then
+#		exit 1
+#	fi
+#	i=$(( $i + 1 ))
+#done
+
+#i=1
+#for HOSTNAME in $HOSTNAMES; do
+#	$PSQL -h $HOSTNAME << __EOF__
+#CREATE NODE coordinator WITH (TYPE = 'coordinator', HOST = '$GTMHOST');
+#__EOF__
+#	if [ $? -ne 0 ]; then
+#		exit 1
+#	fi
+
+#	j=1
+#	for NODENAME in $HOSTNAMES; do
+#		if [ $i -eq $j ]; then
+#			$PSQL -h $HOSTNAME <<__EOF__
+#ALTER NODE coordinator_$j WITH (TYPE = 'coordinator', HOST = '$NODENAME');
+#__EOF__
+#			if [ $? -ne 0 ]; then
+#				exit 1
+#			fi
+#		else
+#			$PSQL -h $HOSTNAME << __EOF__
+#CREATE NODE coordinator_$j WITH (TYPE = 'coordinator', HOST = '$NODENAME');
+#__EOF__
+#			if [ $? -ne 0 ]; then
+#				exit 1
+#			fi
+#		fi
+#		j=$(( $j + 1 ))
+#	done
+#	i=$(( $i + 1 ))
+#done
+
+echo "Adding datanodes to coordinators..."
 i=1
-while [ $i -le $NODES ]; do
-	PORT=$(( $BASEPORT + $i ))
-	$PSQL -c "CREATE NODE datanode$i WITH (TYPE = 'datanode', PORT = $PORT);"
-	$PSQL -c "EXECUTE DIRECT ON (datanode$i) 'CREATE NODE coordinator WITH (TYPE = ''coordinator'', PORT = $PORT)';"
+for HOSTNAME in $HOSTNAMES; do
+	$PSQL <<__EOF__
+CREATE NODE datanode_$i
+WITH (TYPE = 'datanode', HOST = '$HOSTNAME');
+__EOF__
+	if [ $? -ne 0 ]; then
+		exit 1
+	fi
 	i=$(( $i + 1 ))
 done
 
+#for HOSTNAME in $HOSTNAMES; do
+#	i=1
+#	for NODENAME in $HOSTNAMES; do
+#		$PSQL -h $HOSTNAME << __EOF__
+#CREATE NODE datanode_$i
+#WITH (TYPE = 'datanode', HOST = '$NODENAME', PORT = $DATANODEPORT);
+#__EOF__
+#		if [ $? -ne 0 ]; then
+#			exit 1
+#		fi
+#		i=$(( $i + 1 ))
+#	done
+#done
+
+echo "Adding coordinators to datanodes..."
 i=1
-while [ $i -le $NODES ]; do
-	PORT=$(( $BASEPORT + $i ))
+for HOSTNAME in $HOSTNAMES; do
+	$PSQL << __EOF__
+EXECUTE DIRECT ON (datanode_$i)
+'CREATE NODE coordinator WITH (TYPE = ''coordinator'', HOST = ''$GTMHOST'')';
+__EOF__
+	if [ $? -ne 0 ]; then
+		exit 1
+	fi
+
+#	j=1
+#	for NODENAME in $HOSTNAMES; do
+#		$PSQL -h $HOSTNAME << __EOF__
+#EXECUTE DIRECT ON (datanode_$i)
+#'CREATE NODE coordinator_$j
+# WITH (TYPE = ''coordinator'', HOST = ''$NODENAME'')';
+#__EOF__
+#		if [ $? -ne 0 ]; then
+#			exit 1
+#		fi
+#		j=$(( $j + 1 ))
+#	done
+	i=$(( $i + 1 ))
+done
+
+echo "Adding datanodes to datanodes..."
+i=1
+for HOSTNAME in $HOSTNAMES; do
 	j=1
-	while [ $j -le $NODES ]; do
-		PORT2=$(( $BASEPORT + $j ))
-		if [ $j -eq $i ]; then
-			$PSQL -c "EXECUTE DIRECT ON (datanode$j) 'ALTER NODE datanode$i WITH (TYPE = ''datanode'', PORT = $PORT)';"
+	for NODENAME in $HOSTNAMES; do
+		if [ $i -eq $j ]; then
+			$PSQL << __EOF__
+EXECUTE DIRECT ON (datanode_$i)
+'ALTER NODE datanode_$j
+ WITH (TYPE = ''datanode'', HOST = ''$NODENAME'')';
+__EOF__
+			if [ $? -ne 0 ]; then
+				exit 1
+			fi
 		else
-			$PSQL -c "EXECUTE DIRECT ON (datanode$j) 'CREATE NODE datanode$i WITH (TYPE = ''datanode'', PORT = $PORT)';"
+			$PSQL << __EOF__
+EXECUTE DIRECT ON (datanode_$i)
+'CREATE NODE datanode_$j
+WITH (TYPE = ''datanode'', HOST = ''$NODENAME'')';
+__EOF__
+			if [ $? -ne 0 ]; then
+				exit 1
+			fi
 		fi
 		j=$(( $j + 1 ))
 	done
-
 	i=$(( $i + 1 ))
 done
 
-$PSQL -c "SELECT pgxc_pool_reload();"
+$PSQL -c "SELECT pgxc_pool_reload();" || exit 1
 i=1
-while [ $i -le $NODES ]; do
-	$PSQL -c "EXECUTE DIRECT ON (datanode$i) 'SELECT pgxc_pool_reload()';"
+for HOSTNAME in $HOSTNAMES; do
+#	$PSQL -h $HOSTNAME << __EOF__
+#SELECT pgxc_pool_reload();
+#__EOF__
+#	if [ $? -ne 0 ]; then
+#		exit 1
+#	fi
+	$PSQL -h $HOSTNAME << __EOF__
+SELECT pgxc_pool_reload();
+__EOF__
+	if [ $? -ne 0 ]; then
+		exit 1
+	fi
 	i=$(( $i + 1 ))
 done
 
-createdb ${PGDATABASE} || exit 1
+createdb $PGDATABASE || exit 1

@@ -31,7 +31,6 @@ usage()
 	echo " h - this help message"
 	echo " l - database port"
 	echo " n - number of throughput streams"
-	echo " N - number of data nodes (Postgres-XL only)"
 	echo " o - output directory"
 	echo " O - enable oprofile (Linux only)"
 	echo " P - enable linux perf (Linux only)"
@@ -54,7 +53,7 @@ RUN_LOAD_TEST=0
 RUN_POWER_TEST=0
 RUN_THROUGHPUT_TEST=0
 NO_REFRESH=0
-NODES=1
+NODES=0
 OUTPUT_DIR=""
 SCALE_FACTOR=1
 SEED=0
@@ -72,7 +71,7 @@ if [ -n "$DEFAULT_THROUGHPUT_PARAMETERS" ]; then
 	THROUGHPUT_PARAMETERS="$DEFAULT_THROUGHPUT_PARAMETERS"
 fi
 
-while getopts "123a:c:ef:ghN:n:Oo:p:Pq:Rr:s:tuVz" opt; do
+while getopts "123a:c:ef:ghn:Oo:p:Pq:Rr:s:tuVz" opt; do
 	case $opt in
 	1)
 		RUN_LOAD_TEST=1
@@ -109,9 +108,6 @@ while getopts "123a:c:ef:ghN:n:Oo:p:Pq:Rr:s:tuVz" opt; do
 		usage
 		exit 1
 		;;
-	N)
-		NODES=$OPTARG
-		;;
 	n)
 		STREAMS=$OPTARG
 		;;
@@ -125,6 +121,10 @@ while getopts "123a:c:ef:ghN:n:Oo:p:Pq:Rr:s:tuVz" opt; do
 			exit 1
 		fi
 		mkdir -p $OUTPUT_DIR
+		for HOSTNAME in $HOSTNAMES; do
+			ssh $HOSTNAME "mkdir -p $OUTPUT_DIR"
+			NODES=$(( $NODES + 1 ))
+		done
 		;;
 	P)
 		LINUXPERF_FLAG="-Y"
@@ -221,7 +221,6 @@ if [ ${RUN_LOAD_TEST} -eq 1 ]; then
 			${LINUXPERF_FLAG} \
 			-f $SCALE_FACTOR \
 			-g $GENERATE \
-			-n $NODES \
 			${WORKLOAD_ARG} \
 			${TABLESPACES_FLAG} || exit 1
 else
@@ -230,7 +229,7 @@ else
 	# be cleared out.  Otherwise the data collection will be
 	# incomprehensible with duplicate data.
 	#
-	dbt3-${DATABASE}-start-db -n $NODES -o $OUTPUT_DIR
+	dbt3-${DATABASE}-start-db -o $OUTPUT_DIR
 fi
 
 if [ ${RUN_POWER_TEST} -eq 1 ] || [ ${RUN_THROUGHPUT_TEST} -eq 1 ]; then
@@ -246,7 +245,6 @@ if [ ${RUN_POWER_TEST} -eq 1 ]; then
 			${POWER_PARAMETERS_ARG}\
 			${TEST_ARGS} \
 			-s ${SEED_FILE} \
-			-n $NODES \
 			${OPROFILE_FLAG} \
 			${LINUXPERF_FLAG} \
 			${NO_REFRESH_FLAG}
@@ -264,7 +262,6 @@ if [ ${RUN_THROUGHPUT_TEST} -eq 1 ]; then
 			${THROUGHPUT_PARAMETERS_ARG} \
 			${TEST_ARGS} \
 			-s ${SEED_FILE} \
-			-N $NODES \
 			${OPROFILE_FLAG} \
 			${LINUXPERF_FLAG} \
 			${NO_REFRESH_FLAG}
@@ -283,21 +280,27 @@ fi
 
 # Make sure the database is started, which it might be depending on what parts
 # of the workload are executed.
-dbt3-${DATABASE}-start-db -n $NODES -o $OUTPUT_DIR
+dbt3-${DATABASE}-start-db -o $OUTPUT_DIR
 
 # Get system details.
 echo "Getting system configuration... "
 dbt3-get-config $SCALE_FACTOR $STREAMS "$LOAD_PARAMETERS" "$POWER_PARAMETERS" \
 "$THROUGHPUT_PARAMETERS" $OUTPUT_DIR || exit 1
+echo "dbms: $DATABASE" >> $OUTPUT_DIR/config.txt
+echo "datanodes: $NODES" >> $OUTPUT_DIR/config.txt
 
 echo "Getting query times... "
 dbt3-$DATABASE-get-query-time > $OUTPUT_DIR/q_time.csv || exit 1
 
 # Stop the database at the end of the test.
-dbt3-${DATABASE}-stop-db -n $NODES
+dbt3-${DATABASE}-stop-db
 
 # Calculate metrics.
 echo "Post processing query results... "
+for HOSTNAME in $HOSTNAMES; do
+	rsync -av $HOSTNAME:$OUTPUT_DIR/ $OUTPUT_DIR/ &
+done
+wait
 if [ $RUN_POWER_TEST -eq 1 ] || [ $RUN_THROUGHPUT_TEST -eq 1 ]; then
 	dbt3-post-process \
 			-i $OUTPUT_DIR \

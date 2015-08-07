@@ -148,15 +148,13 @@ CREATE TABLE nation (
 	n_nationkey INTEGER,
 	n_name CHAR(25),
 	n_regionkey INTEGER,
-	n_comment VARCHAR(152))
-	DISTRIBUTE BY HASH (n_nationkey);" || exit 1
+	n_comment VARCHAR(152));" || exit 1
 
 create_table "
 CREATE TABLE region (
 	r_regionkey INTEGER,
 	r_name CHAR(25),
-	r_comment VARCHAR(152))
-	DISTRIBUTE BY HASH (r_regionkey);" || exit 1
+	r_comment VARCHAR(152));" || exit 1
 
 create_table "
 CREATE TABLE time_statistics (

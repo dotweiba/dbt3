@@ -8,6 +8,53 @@
 #               2014      Mark Wong
 #               2014      2ndQuadrant, Ltd.
 
+dbstat_init()
+{
+	# Take the initial data points with headers so that data is identifiable
+	# later.
+
+	HOST=$1
+	DIR=$DBOUTPUT_DIR/$2
+
+	mkdir -p $DIR
+
+	$PSQL -h $HOST -c "COPY ($LOCKSTAT) TO STDOUT (FORMAT CSV, HEADER);" \
+			> $DIR/lockstats.csv &
+
+	$PSQL -h $HOST -c "COPY ($DBACTIVITY) TO STDOUT (FORMAT CSV, HEADER);" \
+			> $DIR/db_activity.csv &
+
+	$PSQL -h $HOST -c "COPY ($STATDB) TO STDOUT (FORMAT CSV, HEADER);" \
+			> $DIR/pg_stat_databases.csv &
+
+	$PSQL -h $HOST -c "COPY ($STATTABLE) TO STDOUT (FORMAT CSV, HEADER);" \
+			> $DIR/pg_stat_tables.csv &
+
+	$PSQL -h $HOST -c "COPY ($STATINDEX) TO STDOUT (FORMAT CSV, HEADER);" \
+			> $DIR/pg_stat_indexes.csv &
+}
+
+dbstat()
+{
+	HOST=$1
+	DIR=$DBOUTPUT_DIR/$2
+
+	$PSQL -h $HOST -c "COPY ($LOCKSTAT) TO STDOUT (FORMAT CSV);" \
+			>> $DIR/lockstats.csv &
+
+	$PSQL -h $HOST -c "COPY ($DBACTIVITY) TO STDOUT (FORMAT CSV);" \
+			>> $DIR/db_activity.csv &
+
+	$PSQL -h $HOST -c "COPY ($STATDB) TO STDOUT (FORMAT CSV);" \
+			>> $DIR/pg_stat_databases.csv &
+
+	$PSQL -h $HOST -c "COPY ($STATTABLE) TO STDOUT (FORMAT CSV);" \
+			>> $DIR/pg_stat_tables.csv &
+
+	$PSQL -h $HOST -c "COPY ($STATINDEX) TO STDOUT (FORMAT CSV);" \
+			>> $DIR/pg_stat_indexes.csv &
+}
+
 if [ $# -ne 1 ]; then
 	echo "usage: $0 <output_dir>"
 	exit 1
@@ -68,8 +115,8 @@ ${PSQL} -c "SELECT version();" >> $OUTPUT_DIR/readme.txt
 pg_config --configure >> ${OUTPUT_DIR}/readme.txt
 
 # save the database parameters
-$PSQL -c "SELECT name, setting, source FROM pg_settings ORDER BY lower(name);" \
-		-o $OUTPUT_DIR/param.txt
+#$PSQL -c "SELECT name, setting, source FROM pg_settings ORDER BY lower(name);" \
+#		-o $OUTPUT_DIR/param.txt
 
 # record tables
 ${PSQL} -c "SELECT tablename "`
@@ -85,37 +132,34 @@ ${PSQL} -c "SELECT indexname "`
 
 echo "$$" > ${OUTPUT_DIR}/dbstat.pid
 
-# Take the initial data points with headers so that data is identifiable later.
-${PSQL} -c "COPY (${LOCKSTAT}) TO STDOUT (FORMAT CSV, HEADER);" \
-		> ${DBOUTPUT_DIR}/lockstats.csv &
+dbstat_init $GTMHOST 5432 coordinator &
 
-${PSQL} -c "COPY (${DBACTIVITY}) TO STDOUT (FORMAT CSV, HEADER);" \
-		> ${DBOUTPUT_DIR}/db_activity.csv &
+#i=1
+#for HOSTNAME in $HOSTNAMES; do
+#	dbstat_init $HOSTNAME 5432 coordinator.$i &
+#	i=$(( $i + 1 ))
+#done
 
-${PSQL} -c "COPY (${STATDB}) TO STDOUT (FORMAT CSV, HEADER);" \
-		> ${DBOUTPUT_DIR}/pg_stat_databases.csv &
-
-${PSQL} -c "COPY (${STATTABLE}) TO STDOUT (FORMAT CSV, HEADER);" \
-		> ${DBOUTPUT_DIR}/pg_stat_tables.csv &
-
-${PSQL} -c "COPY (${STATINDEX}) TO STDOUT (FORMAT CSV, HEADER);" \
-		> ${DBOUTPUT_DIR}/pg_stat_indexes.csv &
+i=1
+for HOSTNAME in $HOSTNAMES; do
+	dbstat_init $HOSTNAME datanode.$i &
+	i=$(( $i + 1 ))
+done
 
 while [ 1 ]; do
 	sleep ${SAMPLE_LENGTH}
 
-	${PSQL} -c "COPY (${LOCKSTAT}) TO STDOUT (FORMAT CSV);" \
-			>> ${DBOUTPUT_DIR}/lockstats.csv &
+	dbstat $GTMHOST 5432 coordinator &
 
-	${PSQL} -c "COPY (${DBACTIVITY}) TO STDOUT (FORMAT CSV);" \
-			>> ${DBOUTPUT_DIR}/db_activity.csv &
+#	i=1
+#	for HOSTNAME in $HOSTNAMES; do
+#		dbstat $HOSTNAME 5432 coordinator.$i &
+#		i=$(( $i + 1 ))
+#	done
 
-	${PSQL} -c "COPY (${STATDB}) TO STDOUT (FORMAT CSV);" \
-			>> ${DBOUTPUT_DIR}/pg_stat_databases.csv &
-
-	${PSQL} -c "COPY (${STATTABLE}) TO STDOUT (FORMAT CSV);" \
-			>> ${DBOUTPUT_DIR}/pg_stat_tables.csv &
-
-	${PSQL} -c "COPY (${STATINDEX}) TO STDOUT (FORMAT CSV);" \
-			>> ${DBOUTPUT_DIR}/pg_stat_indexes.csv &
+	i=1
+	for HOSTNAME in $HOSTNAMES; do
+		dbstat $HOSTNAME datanode.$i &
+		i=$(( $i + 1 ))
+	done
 done

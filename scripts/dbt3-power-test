@@ -10,7 +10,6 @@
 
 EXPLAIN=0
 EXPLAIN_ARG=
-NODES=1
 USE_OPROFILE=0
 USE_LINUXPERF=0
 NO_REFRESH=0
@@ -21,7 +20,7 @@ usage()
 }
 
 # process the command line parameters
-while getopts "a:ef:n:o:p:s:yYz" opt; do
+while getopts "a:ef:o:p:s:yYz" opt; do
 	case $opt in
 		a)
 			DATABASE=$OPTARG
@@ -33,13 +32,13 @@ while getopts "a:ef:n:o:p:s:yYz" opt; do
 		f)
 			SCALE_FACTOR=$OPTARG
 			;;
-		n)
-			NODES=$OPTARG
-			;;
 		o)
 			OUTPUT_DIR=$OPTARG
 			RESULTSDIR="${OUTPUT_DIR}/results"
 			mkdir -p ${RESULTSDIR}
+			for HOSTNAME in $HOSTNAMES; do
+				ssh $HOSTNAME "mkdir -p $RESULTSDIR"
+			done
 			;;
 		p)
 			PARAMETERS_ARG="-p \"$OPTARG\""
@@ -103,8 +102,8 @@ __EOF__
 	i=$(( ${i} + 1 ))
 done
 
-dbt3-$DATABASE-stop-db -n $NODES || exit 1
-eval dbt3-$DATABASE-start-db -n $NODES -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
+dbt3-$DATABASE-stop-db || exit 1
+eval dbt3-$DATABASE-start-db -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
 
 # Start collecting system statistics.
 dbt3-sysstats --outdir $OUTPUT_DIR --sample 60 || exit 1
@@ -182,14 +181,18 @@ diff_time=$(( $e_time_power - $s_time_power ))
 echo "Elapsed time for Power Test : $diff_time seconds"
 
 # Stop collecting system statistics.
-read SARPID < ${OUTPUT_DIR}/sar.pid
-kill ${SARPID}
-read PIDSTATPID < ${OUTPUT_DIR}/pidstat.pid
-kill ${PIDSTATPID}
+read SARPIDS < $OUTPUT_DIR/sar.pid
+for SARPID in $SARPIDS; do
+	kill $SARPID
+done
+read PIDSTATPIDS < $OUTPUT_DIR/pidstat.pid
+for PIDSTATPID in $PIDSTATPIDS; do
+	kill $PIDSTATPID
+done
 read DBSTATPID < ${OUTPUT_DIR}/dbstat.pid
 kill ${DBSTATPID}
 
-dbt3-$DATABASE-stop-db -n $NODES || exit 1
+dbt3-$DATABASE-stop-db || exit 1
 
 if [ -f /proc/profile ]; then
 	profname="Power_Test"

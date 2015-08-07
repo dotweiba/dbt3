@@ -38,13 +38,86 @@ __EOF__
 __EOF__
 }
 
+gen_db_chart_pages()
+{
+	for HOST in $GTMHOST $HOSTNAMES; do
+		local HTMLFILE=$OUTDIR/$HOST-db.html
+
+		cat << __EOF__ > $HTMLFILE
+<html>
+<head>
+<title>Database Test 3 $HOST Database Charts</title>
+</head>
+<body>
+<h1>Database Test 3 $HOST Database Charts</h1>
+__EOF__
+
+	local FILES=`ls $OUTDIR/db/$HOST/db-stat-*.png 2> /dev/null`
+	if [ -n "$FILES" ]; then
+		for chart in $FILES; do
+			chart="$HOST/`basename $chart`"
+			cat << __EOF__ >> $HTMLFILE
+<p>
+$chart<br/>
+<a href="$chart"><img src="$chart" width="100%" /></a>
+</p>
+__EOF__
+		done
+	fi
+	cat << __EOF__ >> $HTMLFILE
+</body>
+</html>
+__EOF__
+	done
+}
+
+gen_system_chart_pages()
+{
+	for HOST in $GTMHOST $HOSTNAMES; do
+		local HTMLFILE=$OUTDIR/$HOST-sar.html
+
+		cat << __EOF__ > $HTMLFILE
+<html>
+<head>
+<title>Database Test 3 $HOST System Charts</title>
+</head>
+<body>
+<h1>Database Test 3 $HOST System Charts</h1>
+__EOF__
+
+	local FILES=`ls $OUTDIR/$HOST/sar-cpu*.png 2> /dev/null`
+	if [ -n "$FILES" ]; then
+		for chart in $FILES; do
+			chart="$HOST/`basename $chart`"
+			cat << __EOF__ >> $HTMLFILE
+<p>
+$chart<br/>
+<a href="$chart"><img src="$chart" width="100%" /></a>
+</p>
+__EOF__
+		done
+	fi
+	cat << __EOF__ >> $HTMLFILE
+</body>
+</html>
+__EOF__
+	done
+}
+
 gen_results()
 {
 	local SUBDIR=$2
+
 	local OUTDIR=$INDIR/$SUBDIR
 	local SUBHTMLFILE=$OUTDIR/index.html
 
-	make_charts $OUTDIR
+	for NODE in `ls -d $OUTDIR/db/*/`; do
+		make_db_charts $NODE
+	done
+
+	for HOSTNAME in $GTMHOST $HOSTNAMES; do
+		make_system_charts $OUTDIR/$HOSTNAME
+	done
 
 	cat << __EOF__ > $SUBHTMLFILE
 <html>
@@ -237,33 +310,32 @@ __EOF__
 		fi
 	fi
 
+	gen_system_chart_pages
+	gen_db_chart_pages
+
 	cat << __EOF__ >> $SUBHTMLFILE
 <h2>Charts</h2>
 
 <h3>Processor</h3>
+<ul>
 __EOF__
 
-	local FILES=`ls $OUTDIR/sar-cpu*.png 2> /dev/null`
-	if [ -n "$FILES" ]; then
-		for chart in $FILES; do
-			chart=`basename $chart`
+	for HOST in $GTMHOST $HOSTNAMES; do
 			cat << __EOF__ >> $SUBHTMLFILE
-<p>
-$chart<br/>
-<a href="$chart"><img src="$chart" width="100%" /></a>
-</p>
+  <li><a href="$HOST-sar.html">$HOST</a></li>
 __EOF__
-		done
-	fi
+	done
 
 	cat << __EOF__ >> $SUBHTMLFILE
+</ul>
+
 <h3>Block Devices</h3>
 __EOF__
 
-	local FILES=`ls $OUTDIR/sar-blockdev-*.png 2> /dev/null`
+	local FILES=`ls $OUTDIR/$HOST/sar-blockdev-*.png 2> /dev/null`
 	if [ -n "$FILES" ]; then
 		for chart in $FILES; do
-			chart=`basename $chart`
+			chart="$HOST/`basename $chart`"
 			cat << __EOF__ >> $SUBHTMLFILE
 <p>
 $chart<br/>
@@ -276,21 +348,18 @@ __EOF__
 	cat << __EOF__ >> $SUBHTMLFILE
 
 <h3>Database</h3>
+<ul>
 __EOF__
-	local FILES=`ls $OUTDIR/db/db-stat-dbt3-*.png 2> /dev/null`
-	if [ -n "$FILES" ]; then
-		for chart in $FILES; do
-			chart=`basename $chart`
+
+	for HOST in $GTMHOST $HOSTNAMES; do
 			cat << __EOF__ >> $SUBHTMLFILE
-<p>
-$chart<br/>
-<a href="db/$chart"><img src="db/$chart" width="100%" /></a>
-</p>
+  <li><a href="$HOST-db.html">$HOST</a></li>
 __EOF__
-		done
-	fi
+	done
 
 	cat << __EOF__ >> $SUBHTMLFILE
+</ul>
+
 <h3>Tables</h3>
 __EOF__
 
@@ -329,7 +398,35 @@ __EOF__
 __EOF__
 }
 
-make_charts()
+make_db_charts()
+{
+	local SARDIR=$1
+
+	if [ $FAST -eq 1 ]; then
+		return 0
+	fi
+
+	if [ "x$DATABASE" = "xpgsql" ]; then
+		dbt-pgsql-plot-database-stats ${SARDIR}pg_stat_databases.csv $SARDIR \
+				2>> $ERRLOG
+
+		local OUTDIR=${SARDIR}tables
+		mkdir -p $OUTDIR
+		for table in `cat ${SARDIR}../table-list.txt`; do
+			dbt-pgsql-plot-table-stats ${SARDIR}pg_stat_tables.csv $table \
+					$OUTDIR 2>> $ERRLOG
+		done
+
+		local OUTDIR=${SARDIR}indexes
+		mkdir -p $OUTDIR
+		for index in `cat ${SARDIR}../index-list.txt`; do
+			dbt-pgsql-plot-index-stats ${SARDIR}pg_stat_indexes.csv $index \
+					$OUTDIR 2>> $ERRLOG
+		done
+	fi
+}
+
+make_system_charts()
 {
 	local SARDIR=$1
 
@@ -339,26 +436,6 @@ make_charts()
 
 	dbt-plot-sar-cpu $SARDIR/sar-cpu.csv $SARDIR 2>> $ERRLOG
 	dbt-plot-sar-blockdev $SARDIR/sar-blockdev.csv $SARDIR 2>> $ERRLOG
-
-	local DBDIR=$SARDIR/db
-	if [ "x$DATABASE" = "xpgsql" ]; then
-		dbt-pgsql-plot-database-stats $DBDIR/pg_stat_databases.csv $DBDIR \
-				2>> $ERRLOG
-
-		local OUTDIR=$DBDIR/tables
-		mkdir -p $OUTDIR
-		for table in `cat $DBDIR/table-list.txt`; do
-			dbt-pgsql-plot-table-stats $DBDIR/pg_stat_tables.csv $table \
-					$OUTDIR 2>> $ERRLOG
-		done
-
-		local OUTDIR=$DBDIR/indexes
-		mkdir -p $OUTDIR
-		for index in `cat $DBDIR/index-list.txt`; do
-			dbt-pgsql-plot-index-stats $DBDIR/pg_stat_indexes.csv $index \
-					$OUTDIR 2>> $ERRLOG
-		done
-	fi
 }
 
 # Use this to skip chart generation to help test just the HTML generation.
@@ -383,6 +460,8 @@ if [ -z "$OUTDIR" ]; then
 	OUTDIR=$INDIR
 fi
 
+DATABASE=`grep "^dbms:" /tmp/r1/config.txt | cut -d " " -f 2`
+
 ERRLOG="$OUTDIR/gen-report.txt"
 
 OSVER=`grep "^kernel" $INDIR/config.txt | cut -d ' ' -f3-`
@@ -392,6 +471,10 @@ CPU_MODEL=`grep "^model" $INDIR/config.txt | cut -d " " -f2-`
 CPUS=`grep CPUS $INDIR/config.txt | awk '{print $2}'`
 CPU_MHZ=`grep MHz $INDIR/config.txt | awk '{print $2}'`
 RAM=`grep memory $INDIR/config.txt | awk '{print $2}'`
+NODES=0
+for HOST in $HOSTNAMES; do
+	NODES=$(( $NODES + 1 ))
+done
 
 SF=`grep scale_factor $INDIR/config.txt | awk '{print $2}'`
 STREAMS=`grep num_stream $INDIR/config.txt | awk '{print $2}'`
@@ -463,6 +546,9 @@ cat << __EOF__ > $HTMLFILE
 </tr>
 <tr>
 <td></td><td>$RAM KB RAM</td><td></td>
+</tr>
+<tr>
+<td></td><td>$NODES Datanodes</td><td></td>
 </tr>
 </table>
 

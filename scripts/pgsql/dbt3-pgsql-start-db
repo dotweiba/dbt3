@@ -17,19 +17,17 @@ fi
 LOGFILE="dbt3.log"
 OUTDIR="."
 NODES=1
-while getopts "fn:o:p:" OPT; do
+PARAMETERS="-c listen_addresses='*'"
+while getopts "f:o:p:" OPT; do
 	case ${OPT} in
 	f)
 		rm -f ${PGDATA}/postmaster.pid
-		;;
-	n)
-		NODES=$OPTARG
 		;;
 	o)
 		OUTDIR=${OPTARG}
 		;;
 	p)
-		PARAMETERS="${OPTARG}"
+		PARAMETERS="$PARAMETERS $OPTARG"
 		;;
 	\?)
 		exit 1
@@ -37,14 +35,27 @@ while getopts "fn:o:p:" OPT; do
 	esac
 done
 
-gtm_ctl -D $PGDATA/g -Z gtm -l $OUTDIR/gtm.log start
+gtm_ctl -D $GTMDATA -Z gtm -l $OUTDIR/gtm.log start
+
 i=1
-while [ $i -le $NODES ]; do
-	PORT=$(( $BASEPORT + $i ))
-	POOLPORT=$(( $BASEPOOLPORT + $i ))
-	pg_ctl -Z datanode -w -D $PGDATA/d$i -l $OUTDIR/datanode-$i.log \
-			-o "-p $PORT -c pooler_port=$POOLPORT $PARAMETERS" start
+for HOSTNAME in $HOSTNAMES; do
+	ssh $HOSTNAME "gtm_ctl -Z gtm_proxy -D $GTMPROXYDATA$i -o \"-s $GTMHOST -t 6666\" -l $OUTDIR/gtm_proxy_$i.log start" \
+			|| exit 1
 	i=$(( $i + 1 ))
 done
-pg_ctl -Z coordinator -w -D $PGDATA/c -l $OUTDIR/coordinator.log \
-		-o "-c pooler_port=$BASEPOOLPORT $PARAMTERS" start
+
+i=1
+for HOSTNAME in $HOSTNAMES; do
+	ssh $HOSTNAME "pg_ctl -Z datanode -w -D $DATANODEDATA$i -l $OUTDIR/datanode_$i.log -o \"-c pooler_port=25432 $PARAMETERS\" start" \
+			|| exit 1
+	i=$(( $i + 1 ))
+done
+
+pg_ctl -Z coordinator -w -D $COORDINATORDATA -l $OUTDIR/coordinator.log \
+		-o "-c pooler_port=35432 $PARAMETERS" start
+#i=1
+#for HOSTNAME in $HOSTNAMES; do
+#	ssh $HOSTNAME "pg_ctl -Z coordinator -w -D $COORDINATORDATA.$i -l $OUTDIR/coordinator_$i.log -o \"-c pooler_port=35432 $PARAMETERS\" start" \
+#			|| exit 1
+#	i=$(( $i + 1 ))
+#done

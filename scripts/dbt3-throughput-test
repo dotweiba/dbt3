@@ -14,10 +14,9 @@ USE_LINUXPERF=0
 
 NO_REFRESH=0
 NO_REFRESH_FLAG=
-NODES=1
 TEST_ARGS=
 
-while getopts "a:ef:N:n:o:p:s:yYz" opt; do
+while getopts "a:ef:n:o:p:s:yYz" opt; do
 	case $opt in
 	a) DATABASE=$OPTARG
 		;;
@@ -25,12 +24,13 @@ while getopts "a:ef:N:n:o:p:s:yYz" opt; do
 		;;
 	f) scale_factor=$OPTARG
 		;;
-	N) NODES=$OPTARG
-		;;
 	n) num_stream=$OPTARG
 		;;
 	o) OUTPUT_DIR=$OPTARG
-	   mkdir -p $OUTPUT_DIR/results
+		mkdir -p $OUTPUT_DIR/results
+		for HOSTNAME in $HOSTNAMES; do
+			ssh $HOSTNAME "mkdir -p $OUTPUT_DIR/results"
+		done
 		;;
 	p)
 		PARAMETERS_ARG="-p \"$OPTARG\""
@@ -84,8 +84,8 @@ if [ $USE_LINUXPERF -eq 1 ]; then
 	PERFCOMMAND="perf record -a -g -s -F 100 -o $PERFDIR/perf.data"
 fi
 
-dbt3-$DATABASE-stop-db -n $NODES || exit 1
-eval dbt3-$DATABASE-start-db -n $NODES -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
+dbt3-$DATABASE-stop-db
+eval dbt3-$DATABASE-start-db -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
 
 dbt3-$DATABASE-time-statistics -s -n PERF.THRUPUT || exit 1
 
@@ -101,17 +101,21 @@ eval $PERFCOMMAND dbt3-throughput-stream-wrapper -f $scale_factor \
 		$NO_REFRESH_FLAG $LINUXPERF_FLAG || exit 1
 
 # Stop collecting system statistics.
-read SARPID < ${OUTPUT_DIR}/sar.pid
-kill ${SARPID}
-read PIDSTATPID < ${OUTPUT_DIR}/pidstat.pid
-kill ${PIDSTATPID}
+read SARPIDS < $OUTPUT_DIR/sar.pid
+for SARPID in $SARPIDS; do
+	kill $SARPID
+done
+read PIDSTATPIDS < $OUTPUT_DIR/pidstat.pid
+for PIDSTATPID in $PIDSTATPIDS; do
+	kill $PIDSTATPID
+done
 read DBSTATPID < ${OUTPUT_DIR}/dbstat.pid
 kill ${DBSTATPID}
 
 dbt3-$DATABASE-time-statistics -e -n PERF.THRUPUT || exit 1
 
 # Stop the database after the test.
-dbt3-$DATABASE-stop-db -n $NODES || exit 1
+dbt3-$DATABASE-stop-db
 
 if [ -f /proc/profile ]; then
 	profname="Throughput_Test"

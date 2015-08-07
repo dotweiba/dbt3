@@ -159,6 +159,21 @@ PostgreSQL Environment Variables
 * *DEFAULT_THROUGHPUT_PARAMETERS=``''* - This defines the database parameters
   to be set for the throughput test.
 
+Postgres-XL Environment Variables
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In addition to the PostgreSQL environment variables, Postgres-XL requires the
+following:
+
+* *GTMHOST="pgxl"* - Hostname for the GTM master and Coordinator node.
+* *HOSTNAMES="pgxl1 pgxl2"* - A space-delimited list of hostnames for the
+  Datanodes.export GTMDATA="$PGDATA/gtm"
+* *COORDINATORDATA="$PGDATA/coordinator"* - Data directory for the Coordinator.
+* *GTMPROXYDATA="$PGDATA/gtm_proxy."* - Data directory prefix for the GTM
+  proxy.  The node number will be automatically appended to the end.
+* *DATANODEDATA="$PGDATA/datanode."* - Data directory prefix for the Datanode.
+   The node number will be automatically appended to the end.
+
 Quick Start
 ^^^^^^^^^^^
 
