@@ -74,18 +74,46 @@ __EOF__
 gen_system_chart_pages()
 {
 	for HOST in $GTMHOST $HOSTNAMES; do
-		local HTMLFILE=$OUTDIR/$HOST-sar.html
+		local HTMLFILE=$OUTDIR/$HOST-sar-cpu.html
 
 		cat << __EOF__ > $HTMLFILE
 <html>
 <head>
-<title>Database Test 3 $HOST System Charts</title>
+<title>Database Test 3 $HOST System Processor Charts</title>
 </head>
 <body>
-<h1>Database Test 3 $HOST System Charts</h1>
+<h1>Database Test 3 $HOST System Processor Charts</h1>
 __EOF__
 
 	local FILES=`ls $OUTDIR/$HOST/sar-cpu*.png 2> /dev/null`
+	if [ -n "$FILES" ]; then
+		for chart in $FILES; do
+			chart="$HOST/`basename $chart`"
+			cat << __EOF__ >> $HTMLFILE
+<p>
+$chart<br/>
+<a href="$chart"><img src="$chart" width="100%" /></a>
+</p>
+__EOF__
+		done
+	fi
+	cat << __EOF__ >> $HTMLFILE
+</body>
+</html>
+__EOF__
+
+		local HTMLFILE=$OUTDIR/$HOST-sar-blockdev.html
+
+		cat << __EOF__ > $HTMLFILE
+<html>
+<head>
+<title>Database Test 3 $HOST System Block Device Charts</title>
+</head>
+<body>
+<h1>Database Test 3 $HOST System Block Device Charts</h1>
+__EOF__
+
+	local FILES=`ls $OUTDIR/$HOST/sar-blockdev*.png 2> /dev/null`
 	if [ -n "$FILES" ]; then
 		for chart in $FILES; do
 			chart="$HOST/`basename $chart`"
@@ -322,7 +350,7 @@ __EOF__
 
 	for HOST in $GTMHOST $HOSTNAMES; do
 			cat << __EOF__ >> $SUBHTMLFILE
-  <li><a href="$HOST-sar.html">$HOST</a></li>
+  <li><a href="$HOST-sar-cpu.html">$HOST</a></li>
 __EOF__
 	done
 
@@ -330,22 +358,16 @@ __EOF__
 </ul>
 
 <h3>Block Devices</h3>
+<ul>
 __EOF__
-
-	local FILES=`ls $OUTDIR/$HOST/sar-blockdev-*.png 2> /dev/null`
-	if [ -n "$FILES" ]; then
-		for chart in $FILES; do
-			chart="$HOST/`basename $chart`"
+	for HOST in $GTMHOST $HOSTNAMES; do
 			cat << __EOF__ >> $SUBHTMLFILE
-<p>
-$chart<br/>
-<a href="$chart"><img src="$chart" width="100%" /></a>
-</p>
+  <li><a href="$HOST-sar-blockdev.html">$HOST</a></li>
 __EOF__
-		done
-	fi
+	done
 
 	cat << __EOF__ >> $SUBHTMLFILE
+</ul>
 
 <h3>Database</h3>
 <ul>
@@ -460,7 +482,7 @@ if [ -z "$OUTDIR" ]; then
 	OUTDIR=$INDIR
 fi
 
-DATABASE=`grep "^dbms:" /tmp/r1/config.txt | cut -d " " -f 2`
+DATABASE=`grep "^dbms:" $INDIR/config.txt | cut -d " " -f 2`
 
 ERRLOG="$OUTDIR/gen-report.txt"
 
