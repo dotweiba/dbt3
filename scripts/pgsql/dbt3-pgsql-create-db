@@ -58,6 +58,8 @@ else
 	echo "initializing database cluster..."
 
 	initdb -D $COORDINATORDATA --nodename coordinator || exit 1
+	echo "host all all 0.0.0.0/0 trust" >> $COORDINATORDATA/pg_hba.conf || exit 1
+	echo "host all all ::/0 trust" >> $COORDINATORDATA/pg_hba.conf || exit 1
 	i=1
 	for HOSTNAME in $HOSTNAMES; do
 		ssh $HOSTNAME << __EOF__

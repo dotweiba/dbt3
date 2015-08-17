@@ -74,7 +74,7 @@ CREATE TABLE supplier (
 	s_phone CHAR(15),
 	s_acctbal REAL,
 	s_comment VARCHAR(101))
-	DISTRIBUTE BY HASH (s_suppkey);" || exit 1
+	DISTRIBUTE BY REPLICATION;" || exit 1
 
 create_table "
 CREATE TABLE part (
@@ -108,7 +108,7 @@ CREATE TABLE customer (
 	c_acctbal REAL,
 	c_mktsegment CHAR(10),
 	c_comment VARCHAR(117))
-	DISTRIBUTE BY HASH (c_custkey);" || exit 1
+	DISTRIBUTE BY REPLICATION;" || exit 1
 
 create_table "
 CREATE TABLE orders (
@@ -148,13 +148,13 @@ CREATE TABLE nation (
 	n_nationkey INTEGER,
 	n_name CHAR(25),
 	n_regionkey INTEGER,
-	n_comment VARCHAR(152));" || exit 1
+	n_comment VARCHAR(152)) DISTRIBUTE BY REPLICATION;" || exit 1
 
 create_table "
 CREATE TABLE region (
 	r_regionkey INTEGER,
 	r_name CHAR(25),
-	r_comment VARCHAR(152));" || exit 1
+	r_comment VARCHAR(152)) DISTRIBUTE BY REPLICATION;" || exit 1
 
 create_table "
 CREATE TABLE time_statistics (
