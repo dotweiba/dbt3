@@ -88,6 +88,9 @@ fi
 
 eval dbt3-pgsql-start-db -o $OUTPUT_DIR $PARAMOPT
 if [ $SKIP -eq 1 ]; then
+	# Clear time statistics on repeated run otherwise results are
+	# indecipherable.
+	dbt3-$DATABASE-time-statistics -c
 	exit 0
 fi
 
