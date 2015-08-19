@@ -13,14 +13,13 @@ load_table()
 	table=${1}
 	file=${table}.tbl
 
-	TOTAL=`wc -l $DSS_PATH/$file | cut -d " " -f 1`
-	LPF=$(( ($TOTAL + $NODES - 1) / $NODES ))
-
-	(cd $DSS_PATH; split -d -l $LPF $file $table)
-
-	for FILE in `ls $DSS_PATH/$table??`; do
-		$PSQL -c "COPY $table FROM '$FILE' USING DELIMITERS '|';" &
-	done
+	if [ "$table" = "nation" ] || [ "$table" = "region" ]; then
+			$PSQL -c "COPY $table FROM '$DSS_PATH/$file' USING DELIMITERS '|';" &
+	else
+		for i in `seq 1 $DATANODES`; do
+			$PSQL -c "COPY $table FROM '$DSS_PATH/$file.$i' USING DELIMITERS '|';" &
+		done
+	fi
 	wait
 }
 
@@ -210,6 +209,7 @@ PSQL="psql -v ON_ERROR_STOP=1 -X"
 for HOSTNAME in $HOSTNAMES; do
 	NODES=$(( $NODES + 1 ))
 done
+DATANODES=$(( $NODES * $DNPN ))
 
 supplier &
 part &
