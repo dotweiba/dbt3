@@ -22,7 +22,11 @@ pg_ctl -Z coordinator -w -D $COORDINATORDATA stop -m fast
 
 i=1
 for HOSTNAME in $HOSTNAMES; do
-	ssh $HOSTNAME "pg_ctl -Z datanode -w -D $DATANODEDATA$i stop -m fast"
+	j=1
+	while [ $j -le $DNPN ]; do
+		ssh $HOSTNAME "pg_ctl -Z datanode -w -D $DATANODEDATA$i.$j stop -m fast"
+		j=$(( $j + 1 ))
+	done
 	i=$(( $i + 1 ))
 done
 

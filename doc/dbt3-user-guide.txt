@@ -173,6 +173,10 @@ following:
   proxy.  The node number will be automatically appended to the end.
 * *DATANODEDATA="$PGDATA/datanode."* - Data directory prefix for the Datanode.
    The node number will be automatically appended to the end.
+* *DNPN=2* - Number of datanodes to create per system node.
+* *DNBP=15432* - Starting listener port number for datanodes.
+* *DNBPP=25432* - Starting listener port number for datanode pooler.
+
 
 Quick Start
 ^^^^^^^^^^^

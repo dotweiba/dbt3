@@ -46,8 +46,18 @@ done
 
 i=1
 for HOSTNAME in $HOSTNAMES; do
-	ssh $HOSTNAME "pg_ctl -Z datanode -w -D $DATANODEDATA$i -l $OUTDIR/datanode_$i.log -o \"-c pooler_port=25432 $PARAMETERS\" start" \
-			|| exit 1
+	j=1
+	while [ $j -le $DNPN ]; do
+		PORT=$(( $DNBP + $j ))
+		POOLERPORT=$(( $DNBPP + $j ))
+		ssh $HOSTNAME << __EOF__
+pg_ctl -Z datanode -w -D $DATANODEDATA$i.$j -l $OUTDIR/datanode_$i_$j.log -o "-p $PORT -c pooler_port=$POOLERPORT $PARAMETERS" start
+__EOF__
+		if [ $? -ne 0 ]; then
+			exit 1
+		fi
+		j=$(( $j + 1 ))
+	done
 	i=$(( $i + 1 ))
 done
 

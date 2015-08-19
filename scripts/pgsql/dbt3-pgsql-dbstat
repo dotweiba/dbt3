@@ -13,45 +13,60 @@ dbstat_init()
 	# Take the initial data points with headers so that data is identifiable
 	# later.
 
-	HOST=$1
-	DIR=$DBOUTPUT_DIR/$2
+	local HOST=$1
+	local DIR=$DBOUTPUT_DIR/$2
+	local PORT=$3
+
+	if [ ! "x$PORT" = "x" ]; then
+		local PORTFLAG="-p $PORT"
+	fi
 
 	mkdir -p $DIR
 
-	$PSQL -h $HOST -c "COPY ($LOCKSTAT) TO STDOUT (FORMAT CSV, HEADER);" \
+	$PSQL -h $HOST $PORTFLAG \
+			-c "COPY ($LOCKSTAT) TO STDOUT (FORMAT CSV, HEADER);" \
 			> $DIR/lockstats.csv &
 
-	$PSQL -h $HOST -c "COPY ($DBACTIVITY) TO STDOUT (FORMAT CSV, HEADER);" \
+	$PSQL -h $HOST $PORTFLAG \
+			-c "COPY ($DBACTIVITY) TO STDOUT (FORMAT CSV, HEADER);" \
 			> $DIR/db_activity.csv &
 
-	$PSQL -h $HOST -c "COPY ($STATDB) TO STDOUT (FORMAT CSV, HEADER);" \
+	$PSQL -h $HOST $PORTFLAG \
+			-c "COPY ($STATDB) TO STDOUT (FORMAT CSV, HEADER);" \
 			> $DIR/pg_stat_databases.csv &
 
-	$PSQL -h $HOST -c "COPY ($STATTABLE) TO STDOUT (FORMAT CSV, HEADER);" \
+	$PSQL -h $HOST $PORTFLAG \
+			-c "COPY ($STATTABLE) TO STDOUT (FORMAT CSV, HEADER);" \
 			> $DIR/pg_stat_tables.csv &
 
-	$PSQL -h $HOST -c "COPY ($STATINDEX) TO STDOUT (FORMAT CSV, HEADER);" \
+	$PSQL -h $HOST $PORTFLAG \
+			-c "COPY ($STATINDEX) TO STDOUT (FORMAT CSV, HEADER);" \
 			> $DIR/pg_stat_indexes.csv &
 }
 
 dbstat()
 {
-	HOST=$1
-	DIR=$DBOUTPUT_DIR/$2
+	local HOST=$1
+	local DIR=$DBOUTPUT_DIR/$2
+	local PORT=$3
 
-	$PSQL -h $HOST -c "COPY ($LOCKSTAT) TO STDOUT (FORMAT CSV);" \
+	if [ ! "x$PORT" = "x" ]; then
+		local PORTFLAG="-p $PORT"
+	fi
+
+	$PSQL -h $HOST $PORTFLAG -c "COPY ($LOCKSTAT) TO STDOUT (FORMAT CSV);" \
 			>> $DIR/lockstats.csv &
 
-	$PSQL -h $HOST -c "COPY ($DBACTIVITY) TO STDOUT (FORMAT CSV);" \
+	$PSQL -h $HOST $PORTFLAG -c "COPY ($DBACTIVITY) TO STDOUT (FORMAT CSV);" \
 			>> $DIR/db_activity.csv &
 
-	$PSQL -h $HOST -c "COPY ($STATDB) TO STDOUT (FORMAT CSV);" \
+	$PSQL -h $HOST $PORTFLAG -c "COPY ($STATDB) TO STDOUT (FORMAT CSV);" \
 			>> $DIR/pg_stat_databases.csv &
 
-	$PSQL -h $HOST -c "COPY ($STATTABLE) TO STDOUT (FORMAT CSV);" \
+	$PSQL -h $HOST $PORTFLAG -c "COPY ($STATTABLE) TO STDOUT (FORMAT CSV);" \
 			>> $DIR/pg_stat_tables.csv &
 
-	$PSQL -h $HOST -c "COPY ($STATINDEX) TO STDOUT (FORMAT CSV);" \
+	$PSQL -h $HOST $PORTFLAG -c "COPY ($STATINDEX) TO STDOUT (FORMAT CSV);" \
 			>> $DIR/pg_stat_indexes.csv &
 }
 
@@ -132,7 +147,7 @@ ${PSQL} -c "SELECT indexname "`
 
 echo "$$" > ${OUTPUT_DIR}/dbstat.pid
 
-dbstat_init $GTMHOST 5432 coordinator &
+dbstat_init $GTMHOST coordinator &
 
 #i=1
 #for HOSTNAME in $HOSTNAMES; do
@@ -142,14 +157,19 @@ dbstat_init $GTMHOST 5432 coordinator &
 
 i=1
 for HOSTNAME in $HOSTNAMES; do
-	dbstat_init $HOSTNAME datanode.$i &
+	j=1
+	while [ $j -le $DNPN ]; do
+		DPORT=$(( $DNBP + $j ))
+		dbstat_init $HOSTNAME datanode.$i.$j $DPORT &
+		j=$(( $j + 1 ))
+	done
 	i=$(( $i + 1 ))
 done
 
 while [ 1 ]; do
 	sleep ${SAMPLE_LENGTH}
 
-	dbstat $GTMHOST 5432 coordinator &
+	dbstat $GTMHOST coordinator &
 
 #	i=1
 #	for HOSTNAME in $HOSTNAMES; do
@@ -159,7 +179,12 @@ while [ 1 ]; do
 
 	i=1
 	for HOSTNAME in $HOSTNAMES; do
-		dbstat $HOSTNAME datanode.$i &
+		j=1
+		while [ $j -le $DNPN ]; do
+			DPORT=$(( $DNBP + $j ))
+			dbstat $HOSTNAME datanode.$i.$j $DPORT &
+			j=$(( $j + 1 ))
+		done
 		i=$(( $i + 1 ))
 	done
 done

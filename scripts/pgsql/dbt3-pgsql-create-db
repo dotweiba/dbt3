@@ -66,14 +66,20 @@ else
 #initdb -D $COORDINATORDATA.$i --nodename coordinator_$i || exit 1
 #echo "host all all 0.0.0.0/0 trust" >> $COORDINATORDATA.$i/pg_hba.conf || exit 1
 #echo "host all all ::/0 trust" >> $COORDINATORDATA.$i/pg_hba.conf || exit 1
-initdb -D $DATANODEDATA$i --nodename datanode_$i || exit 1
-echo "host all all 0.0.0.0/0 trust" >> $DATANODEDATA$i/pg_hba.conf || exit 1
-echo "host all all ::/0 trust" >> $DATANODEDATA$i/pg_hba.conf || exit 1
 initgtm -D $GTMPROXYDATA$i -Z gtm_proxy || exit 1
 __EOF__
-		if [ $? -ne 0 ]; then
-			exit 1
-		fi
+		j=1
+		while [ $j -le $DNPN ]; do
+			ssh $HOSTNAME << __EOF__
+initdb -D $DATANODEDATA$i.$j --nodename datanode_${i}_$j || exit 1
+echo "host all all 0.0.0.0/0 trust" >> $DATANODEDATA$i.$j/pg_hba.conf || exit 1
+echo "host all all ::/0 trust" >> $DATANODEDATA$i.$j/pg_hba.conf || exit 1
+__EOF__
+			if [ $? -ne 0 ]; then
+				exit 1
+			fi
+			j=$(( $j + 1 ))
+		done
 
 		i=$(( $i + 1 ))
 	done
@@ -138,13 +144,18 @@ fi
 echo "Adding datanodes to coordinators..."
 i=1
 for HOSTNAME in $HOSTNAMES; do
-	$PSQL <<__EOF__
-CREATE NODE datanode_$i
-WITH (TYPE = 'datanode', HOST = '$HOSTNAME');
+	j=1
+	while [ $j -le $DNPN ]; do
+		PORT=$(( $DNBP + $j ))
+		$PSQL <<__EOF__
+CREATE NODE datanode_${i}_$j
+WITH (TYPE = 'datanode', HOST = '$HOSTNAME', PORT = $PORT);
 __EOF__
-	if [ $? -ne 0 ]; then
-		exit 1
-	fi
+		if [ $? -ne 0 ]; then
+			exit 1
+		fi
+		j=$(( $j + 1 ))
+	done
 	i=$(( $i + 1 ))
 done
 
@@ -165,13 +176,15 @@ done
 echo "Adding coordinators to datanodes..."
 i=1
 for HOSTNAME in $HOSTNAMES; do
-	$PSQL << __EOF__
-EXECUTE DIRECT ON (datanode_$i)
+	j=1
+	while [ $j -le $DNPN ]; do
+		$PSQL << __EOF__
+EXECUTE DIRECT ON (datanode_${i}_$j)
 'CREATE NODE coordinator WITH (TYPE = ''coordinator'', HOST = ''$GTMHOST'')';
 __EOF__
-	if [ $? -ne 0 ]; then
-		exit 1
-	fi
+		if [ $? -ne 0 ]; then
+			exit 1
+		fi
 
 #	j=1
 #	for NODENAME in $HOSTNAMES; do
@@ -185,33 +198,45 @@ __EOF__
 #		fi
 #		j=$(( $j + 1 ))
 #	done
+		j=$(( $j + 1 ))
+	done
 	i=$(( $i + 1 ))
 done
 
 echo "Adding datanodes to datanodes..."
 i=1
+# For each node, each datanode needs a host and node number combination.
 for HOSTNAME in $HOSTNAMES; do
 	j=1
-	for NODENAME in $HOSTNAMES; do
-		if [ $i -eq $j ]; then
-			$PSQL << __EOF__
-EXECUTE DIRECT ON (datanode_$i)
-'ALTER NODE datanode_$j
- WITH (TYPE = ''datanode'', HOST = ''$NODENAME'')';
+	while [ $j -le $DNPN ]; do
+		k=1
+		for NODENAME in $HOSTNAMES; do
+			l=1
+			while [ $l -le $DNPN ]; do
+				PORT=$(( DNBP + $l ))
+				if [ $i -eq $k ] && [ $j -eq $l ]; then
+					$PSQL << __EOF__
+EXECUTE DIRECT ON (datanode_${i}_$j)
+'ALTER NODE datanode_${k}_$l
+ WITH (TYPE = ''datanode'', HOST = ''$NODENAME'', PORT = $PORT)';
 __EOF__
-			if [ $? -ne 0 ]; then
-				exit 1
-			fi
-		else
-			$PSQL << __EOF__
-EXECUTE DIRECT ON (datanode_$i)
-'CREATE NODE datanode_$j
-WITH (TYPE = ''datanode'', HOST = ''$NODENAME'')';
+					if [ $? -ne 0 ]; then
+						exit 1
+					fi
+				else
+					$PSQL << __EOF__
+EXECUTE DIRECT ON (datanode_${i}_$j)
+'CREATE NODE datanode_${k}_$l
+WITH (TYPE = ''datanode'', HOST = ''$NODENAME'', PORT = $PORT)';
 __EOF__
-			if [ $? -ne 0 ]; then
-				exit 1
-			fi
-		fi
+					if [ $? -ne 0 ]; then
+						exit 1
+					fi
+				fi
+				l=$(( $l + 1 ))
+			done
+			k=$(( $k + 1 ))
+		done
 		j=$(( $j + 1 ))
 	done
 	i=$(( $i + 1 ))
@@ -220,18 +245,23 @@ done
 $PSQL -c "SELECT pgxc_pool_reload();" || exit 1
 i=1
 for HOSTNAME in $HOSTNAMES; do
+	j=1
+	while [ $j -le $DNPN ]; do
 #	$PSQL -h $HOSTNAME << __EOF__
 #SELECT pgxc_pool_reload();
 #__EOF__
 #	if [ $? -ne 0 ]; then
 #		exit 1
 #	fi
-	$PSQL -h $HOSTNAME << __EOF__
-SELECT pgxc_pool_reload();
+		$PSQL << __EOF__
+EXECUTE DIRECT ON (datanode_${i}_$j)
+'SELECT pgxc_pool_reload()';
 __EOF__
-	if [ $? -ne 0 ]; then
-		exit 1
-	fi
+		if [ $? -ne 0 ]; then
+			exit 1
+		fi
+		j=$(( $j + 1 ))
+	done
 	i=$(( $i + 1 ))
 done
 
