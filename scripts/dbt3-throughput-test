@@ -78,11 +78,15 @@ if [ $USE_OPROFILE -eq 1 ]; then
 	clearoprof
 fi
 
-if [ $USE_LINUXPERF -eq 1 ]; then
-	PERFDIR=$OUTPUT_DIR/perf
-	mkdir -p $PERFDIR
-	PERFCOMMAND="perf record -a -g -s -F 100 -o $PERFDIR/perf.data"
-fi
+#if [ $USE_LINUXPERF -eq 1 ]; then
+#	PERFDIR=$OUTPUT_DIR/perf
+#	for HOSTNAME in $GTMHOST $HOSTNAMES; do
+#		ssh $HOSTNAME << __EOF__ &
+#mkdir -p $PERFDIR
+#perf record -a -g -s -F 100 -o $PERFDIR/perf-$HOSTNAME.data
+#__EOF__
+#	done
+#fi
 
 dbt3-$DATABASE-stop-db
 eval dbt3-$DATABASE-start-db -o $OUTPUT_DIR $PARAMETERS_ARG || exit 1
@@ -127,36 +131,48 @@ if [ $USE_OPROFILE -eq 1 ]; then
 	getoprof
 fi
 
-if [ $USE_LINUXPERF -eq 1 ]; then
-	echo "Generating Linux perf reports for throughput test..."
-	(perf report -i $PERFDIR/perf.data -n > $PERFDIR/perf-report.txt \
-			2>> $OUTPUT_DIR/perf/report-output.txt && \
-			$GZIP $PERFDIR/perf-report.txt) &
-	(perf annotate -l -P -i $PERFDIR/perf.data > $PERFDIR/perf-annotate.txt \
-			2>> $OUTPUT_DIR/perf/report-output.txt && \
-			$GZIP $PERFDIR/perf-annotate.txt) &
-	(perf script -L -i $PERFDIR/perf.data > $PERFDIR/perf-trace.txt \
-			2>> $OUTPUT_DIR/perf/report-output.txt && \
-			$GZIP $PERFDIR/perf-trace.txt) &
-
-	i=1
-	while [ $i -le $num_stream ]; do
-		j=1
-		while [ $j -le 22 ]; do
-			PERFDIR=$OUTPUT_DIR/results/$i/perf/$j
-			PERFPREFIX=q$j
-			(perf report -i $PERFDIR/$PERFPREFIX-perf.data -n \
-					> $PERFDIR/$PERFPREFIX-perf-report.txt && \
-					$GZIP $PERFDIR/$PERFPREFIX-perf-report.txt) &
-			(perf annotate -l -P -i $PERFDIR/$PERFPREFIX-perf.data \
-					> $PERFDIR/$PERFPREFIX-perf-annotate.txt && \
-					$GZIP $PERFDIR/$PERFPREFIX-perf-annotate.txt) &
-			(perf script -L -i $PERFDIR/$PERFPREFIX-perf.data \
-					> $PERFDIR/$PERFPREFIX-perf-trace.txt && \
-					$GZIP $PERFDIR/$PERFPREFIX-perf-trace.txt) &
-			j=$(( $j + 1 ))
-		done
-		i=$(( $i + 1 ))
-	done > $OUTPUT_DIR/perf/perf-output.txt 2>&1
-	wait
-fi
+#if [ $USE_LINUXPERF -eq 1 ]; then
+#	echo "Generating Linux perf reports for throughput test..."
+#	for HOSTNAME in $GTMHOST $HOSTNAMES; do
+#		PERFDIR=$OUTPUT_DIR/perf
+#		ssh $HOSTNAME << __EOF__ &
+#perf report -i $PERFDIR/perf-$HOSTNAME.data -n \
+#		> $PERFDIR/perf-report-$HOSTNAME.txt
+#perf annotate -l -P -i $PERFDIR/perf-$HOSTNAME.data \
+#		> $PERFDIR/perf-annotate-$HOSTNAME.txt
+#perf script -L -i $PERFDIR/perf-$HOSTNAME.data \
+#		> $PERFDIR/perf-trace-$HOSTNAME.txt
+#__EOF__
+#
+#	done > $OUTPUT_DIR/perf/report-output.txt 2>&1
+#	(perf report -i $PERFDIR/perf.data -n > $PERFDIR/perf-report.txt \
+#			2>> $OUTPUT_DIR/perf/report-output.txt && \
+#			$GZIP $PERFDIR/perf-report.txt) &
+#	(perf annotate -l -P -i $PERFDIR/perf.data > $PERFDIR/perf-annotate.txt \
+#			2>> $OUTPUT_DIR/perf/report-output.txt && \
+#			$GZIP $PERFDIR/perf-annotate.txt) &
+#	(perf script -L -i $PERFDIR/perf.data > $PERFDIR/perf-trace.txt \
+#			2>> $OUTPUT_DIR/perf/report-output.txt && \
+#			$GZIP $PERFDIR/perf-trace.txt) &
+#
+#	i=1
+#	while [ $i -le $num_stream ]; do
+#		j=1
+#		while [ $j -le 22 ]; do
+#			PERFDIR=$OUTPUT_DIR/results/$i/perf/$j
+#			PERFPREFIX=q$j
+#			(perf report -i $PERFDIR/$PERFPREFIX-perf.data -n \
+#					> $PERFDIR/$PERFPREFIX-perf-report.txt && \
+#					$GZIP $PERFDIR/$PERFPREFIX-perf-report.txt) &
+#			(perf annotate -l -P -i $PERFDIR/$PERFPREFIX-perf.data \
+#					> $PERFDIR/$PERFPREFIX-perf-annotate.txt && \
+#					$GZIP $PERFDIR/$PERFPREFIX-perf-annotate.txt) &
+#			(perf script -L -i $PERFDIR/$PERFPREFIX-perf.data \
+#					> $PERFDIR/$PERFPREFIX-perf-trace.txt && \
+#					$GZIP $PERFDIR/$PERFPREFIX-perf-trace.txt) &
+#			j=$(( $j + 1 ))
+#		done
+#		i=$(( $i + 1 ))
+#	done > $OUTPUT_DIR/perf/perf-output.txt 2>&1
+#	wait
+#fi

@@ -116,10 +116,15 @@ fi
 if [ $USE_LINUXPERF -eq 1 ]; then
 	PERFDIR=$OUTPUT_DIR/perf
 	mkdir -p $PERFDIR
-	PERFCOMMAND="perf record -a -g -s -F 100 -o $PERFDIR/perf.data"
+	for HOSTNAME in $GTMHOST $HOSTNAMES; do
+		ssh $HOSTNAME << __EOF__ &
+mkdir -p $PERFDIR
+perf record -a -g -s -F 100 -o $PERFDIR/perf-$HOSTNAME.data
+__EOF__
+	done
 fi
 
-eval $PERFCOMMAND dbt3-pgsql-load-data || exit 1
+dbt3-pgsql-load-data || exit 1
 
 psql -v ON_ERROR_STOP=1 -X -q << __EOF__ > /dev/null 2>&1
 UPDATE time_statistics
@@ -142,6 +147,11 @@ done
 read DBSTATPID < ${OUTPUT_DIR}/dbstat.pid
 kill ${DBSTATPID}
 
+# Brute force.
+for HOSTNAME in $GTMHOST $HOSTNAMES; do
+	ssh $HOSTNAME "killall -9 sar sadc perf pidstat"
+done
+
 # Collect profile data.
 if [ -f /proc/profile ]; then
 	profname='Load_Test'
@@ -155,10 +165,17 @@ fi
 
 if [ $USE_LINUXPERF -eq 1 ]; then
 	echo "Generating Linux perf reports for load test..."
-	perf report -i $PERFDIR/perf.data -n > $PERFDIR/perf-report.txt \
-			2>> $OUTPUT_DIR/perf/report-output.txt &
-	perf annotate -l -P -i $PERFDIR/perf.data > $PERFDIR/perf-annotate.txt \
-			2>> $OUTPUT_DIR/perf/report-output.txt &
-	perf script -L -i $PERFDIR/perf.data > $PERFDIR/perf-trace.txt \
-			2>> $OUTPUT_DIR/perf/report-output.txt &
+	for HOSTNAME in $GTMHOST $HOSTNAMES; do
+		ssh $HOSTNAME << __EOF__ &
+perf report -i $PERFDIR/perf-$HOSTNAME.data -n \
+		> $PERFDIR/perf-report-$HOSTNAME.txt \
+		2>> $OUTPUT_DIR/perf/report-output-$HOSTNAME.txt &
+perf annotate -l -P -i $PERFDIR/perf-$HOSTNAME.data \
+		> $PERFDIR/perf-annotate-$HOSTNAME.txt \
+		2>> $OUTPUT_DIR/perf/report-output-$HOSTNAME.txt &
+perf script -L -i $PERFDIR/perf-$HOSTNAME.data \
+		> $PERFDIR/perf-trace-$HOSTNAME.txt \
+		2>> $OUTPUT_DIR/perf/report-output-$HOSTNAME.txt &
+__EOF__
+	done
 fi
