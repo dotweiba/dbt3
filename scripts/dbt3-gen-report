@@ -129,6 +129,34 @@ __EOF__
 </body>
 </html>
 __EOF__
+
+		local HTMLFILE=$OUTDIR/$HOST-sar-net.html
+
+		cat << __EOF__ > $HTMLFILE
+<html>
+<head>
+<title>Database Test 3 $HOST System Network Device Charts</title>
+</head>
+<body>
+<h1>Database Test 3 $HOST System Network Device Charts</h1>
+__EOF__
+
+	local FILES=`ls $OUTDIR/$HOST/sar-net*.png 2> /dev/null`
+	if [ -n "$FILES" ]; then
+		for chart in $FILES; do
+			chart="$HOST/`basename $chart`"
+			cat << __EOF__ >> $HTMLFILE
+<p>
+$chart<br/>
+<a href="$chart"><img src="$chart" width="100%" /></a>
+</p>
+__EOF__
+		done
+	fi
+	cat << __EOF__ >> $HTMLFILE
+</body>
+</html>
+__EOF__
 	done
 }
 
@@ -369,6 +397,18 @@ __EOF__
 	cat << __EOF__ >> $SUBHTMLFILE
 </ul>
 
+<h3>Network Devices</h3>
+<ul>
+__EOF__
+	for HOST in $GTMHOST $HOSTNAMES; do
+			cat << __EOF__ >> $SUBHTMLFILE
+  <li><a href="$HOST-sar-net.html">$HOST</a></li>
+__EOF__
+	done
+
+	cat << __EOF__ >> $SUBHTMLFILE
+</ul>
+
 <h3>Database</h3>
 <ul>
 __EOF__
@@ -458,6 +498,7 @@ make_system_charts()
 
 	dbt-plot-sar-cpu $SARDIR/sar-cpu.csv $SARDIR 2>> $ERRLOG
 	dbt-plot-sar-blockdev $SARDIR/sar-blockdev.csv $SARDIR 2>> $ERRLOG
+	dbt-plot-sar-net $SARDIR/sar-net.csv $SARDIR 2>> $ERRLOG
 }
 
 # Use this to skip chart generation to help test just the HTML generation.

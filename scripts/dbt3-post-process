@@ -20,6 +20,7 @@ make_sar_csv() {
 	${SADF} ${FILE} -- -R > ${DIR}/sar-mem1.csv
 	${SADF} ${FILE} -- -r > ${DIR}/sar-mem2.csv
 	${SADF} ${FILE} -- -W > ${DIR}/sar-swap.csv
+	$SADF $FILE -- -n DEV > $DIR/sar-net.csv
 }
 
 PLOT_OPTS=""
