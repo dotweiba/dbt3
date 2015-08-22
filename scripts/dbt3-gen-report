@@ -130,6 +130,62 @@ __EOF__
 </html>
 __EOF__
 
+		local HTMLFILE=$OUTDIR/$HOST-sar-mem.html
+
+		cat << __EOF__ > $HTMLFILE
+<html>
+<head>
+<title>Database Test 3 $HOST System Memory Charts</title>
+</head>
+<body>
+<h1>Database Test 3 $HOST System Memory Charts</h1>
+__EOF__
+
+	local FILES=`ls $OUTDIR/$HOST/sar-mem*.png 2> /dev/null`
+	if [ -n "$FILES" ]; then
+		for chart in $FILES; do
+			chart="$HOST/`basename $chart`"
+			cat << __EOF__ >> $HTMLFILE
+<p>
+$chart<br/>
+<a href="$chart"><img src="$chart" width="100%" /></a>
+</p>
+__EOF__
+		done
+	fi
+	cat << __EOF__ >> $HTMLFILE
+</body>
+</html>
+__EOF__
+
+		local HTMLFILE=$OUTDIR/$HOST-sar-swap.html
+
+		cat << __EOF__ > $HTMLFILE
+<html>
+<head>
+<title>Database Test 3 $HOST System Swap Charts</title>
+</head>
+<body>
+<h1>Database Test 3 $HOST System Swap Charts</h1>
+__EOF__
+
+	local FILES=`ls $OUTDIR/$HOST/sar-swap*.png 2> /dev/null`
+	if [ -n "$FILES" ]; then
+		for chart in $FILES; do
+			chart="$HOST/`basename $chart`"
+			cat << __EOF__ >> $HTMLFILE
+<p>
+$chart<br/>
+<a href="$chart"><img src="$chart" width="100%" /></a>
+</p>
+__EOF__
+		done
+	fi
+	cat << __EOF__ >> $HTMLFILE
+</body>
+</html>
+__EOF__
+
 		local HTMLFILE=$OUTDIR/$HOST-sar-net.html
 
 		cat << __EOF__ > $HTMLFILE
@@ -397,6 +453,30 @@ __EOF__
 	cat << __EOF__ >> $SUBHTMLFILE
 </ul>
 
+<h3>Memory</h3>
+<ul>
+__EOF__
+	for HOST in $GTMHOST $HOSTNAMES; do
+			cat << __EOF__ >> $SUBHTMLFILE
+  <li><a href="$HOST-sar-mem.html">$HOST</a></li>
+__EOF__
+	done
+
+	cat << __EOF__ >> $SUBHTMLFILE
+</ul>
+
+<h3>Swap</h3>
+<ul>
+__EOF__
+	for HOST in $GTMHOST $HOSTNAMES; do
+			cat << __EOF__ >> $SUBHTMLFILE
+  <li><a href="$HOST-sar-swap.html">$HOST</a></li>
+__EOF__
+	done
+
+	cat << __EOF__ >> $SUBHTMLFILE
+</ul>
+
 <h3>Network Devices</h3>
 <ul>
 __EOF__
@@ -498,6 +578,8 @@ make_system_charts()
 
 	dbt-plot-sar-cpu $SARDIR/sar-cpu.csv $SARDIR 2>> $ERRLOG
 	dbt-plot-sar-blockdev $SARDIR/sar-blockdev.csv $SARDIR 2>> $ERRLOG
+	dbt-plot-sar-mem $SARDIR/sar-mem2.csv $SARDIR 2>> $ERRLOG
+	dbt-plot-sar-swap $SARDIR/sar-swap.csv $SARDIR 2>> $ERRLOG
 	dbt-plot-sar-net $SARDIR/sar-net.csv $SARDIR 2>> $ERRLOG
 }
 
