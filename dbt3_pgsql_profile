@@ -1,0 +1,23 @@
+# dbt3 source code is under /opt/dbt3
+export DSS_QUERY="/opt/dbt3/queries/pgsql"
+export DSS_PATH="/tmp/dss_path"
+export DSS_CONFIG="/opt/dbt3/src/dbgen"
+
+export DBGEN="${DSS_CONFIG}/dbgen"
+export QGEN="${DSS_CONFIG}/qgen"
+
+export DBT3_DIR=/tmp/dbt3
+
+export PGDATABASE=dbt3
+export PGDATA=/var/lib/postgresql/10/main/
+
+export PGPORT=5432
+
+export DEFAULT_LOAD_PARAMETERS=""
+export DEFAULT_POWER_PARAMETERS=""
+export DEFAULT_THROUGHPUT_PARAMETERS=""
+
+# Directory with tablespace mount points, if using tablespaces.
+export TSDIR=${DBT3_DIR}
+# Path to initdb
+export PATH="$PATH:/usr/lib/postgresql/10/bin"
