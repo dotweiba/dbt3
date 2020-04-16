@@ -1,6 +1,7 @@
 #!/bin/bash
 
-sudo apt-get install build-essential
+sudo apt update
+sudo apt-get install build-essential autoconf
 ./autogen.sh
 ./configure --with-postgresql
 make && sudo make install
