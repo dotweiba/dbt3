@@ -9,9 +9,9 @@ export QGEN="${DSS_CONFIG}/qgen"
 export DBT3_DIR=/tmp/dbt3
 
 export PGDATABASE=dbt3
-export PGDATA=/var/lib/postgresql/10/main/
+export PGDATA=/tmp/mydata
 
-export PGPORT=5432
+export PGPORT=5433
 
 export DEFAULT_LOAD_PARAMETERS=""
 export DEFAULT_POWER_PARAMETERS=""
